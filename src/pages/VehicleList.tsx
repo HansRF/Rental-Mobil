@@ -26,7 +26,7 @@ export const VehicleList = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-text-primary mb-1">
-              Manajemen Mobil
+              Manajemen Kendaraan
             </h1>
 
             <p className="text-text-secondary font-medium">

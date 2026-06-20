@@ -84,7 +84,7 @@ export const VehicleList = () => {
 
                 <th className="p-4 text-left">Foto</th>
 
-                <th className="p-4 text-left">Nama Mobil</th>
+                <th className="p-4 text-left">Nama_Mobil</th>
 
                 <th className="p-4 text-left">Tipe</th>
 

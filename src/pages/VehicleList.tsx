@@ -82,7 +82,7 @@ export const VehicleList = () => {
               <tr className="border-b border-brand-border bg-brand-primary">
                 <th className="p-4 text-left">ID</th>
 
-                <th className="p-4 text-left">Foto</th>
+                <th className="p-4 text-left">Gambar</th>
 
                 <th className="p-4 text-left">Nama_Mobil</th>
 

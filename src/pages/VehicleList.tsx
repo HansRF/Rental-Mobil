@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Vehicle } from "../types";
-import { VEHICLES } from "../constants/dummyData";
 import { DashboardLayout } from "../components/DashboardLayout";
 import { Search, Plus, Pencil, Trash2 } from "lucide-react";
 
@@ -8,11 +7,24 @@ export const VehicleList = () => {
   const [filter, setFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>(VEHICLES);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   const [showModal, setShowModal] = useState(false);
 
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+
+  const fetchVehicles = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/vehicles");
+      const data = await res.json();
+      setVehicles(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+  useEffect(() => {
+    fetchVehicles();
+  }, []);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -41,49 +53,49 @@ export const VehicleList = () => {
     });
   };
 
-  const handleSubmit = () => {
-    if (editingVehicle) {
-      setVehicles(
-        vehicles.map((v) =>
-          v.id === editingVehicle.id
-            ? {
-                ...v,
-                ...formData,
-              }
-            : v,
-        ),
-      );
-    } else {
-      const newVehicle: Vehicle = {
-        id: Date.now().toString(),
-
+  const handleSubmit = async () => {
+    try {
+      const payload = {
         name: formData.name,
         type: formData.type,
         price: formData.price,
         status: formData.status,
         image: formData.image,
-
-        seats: 6,
-        transmission: "Automatic",
-        fuel: "Petrol",
-        rating: 5,
-        description: "",
       };
 
-      setVehicles([...vehicles, newVehicle]);
+      if (editingVehicle) {
+        await fetch(`http://127.0.0.1:8000/api/vehicles/${editingVehicle.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await fetch("http://127.0.0.1:8000/api/vehicles", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+      }
+
+      await fetchVehicles();
+
+      setShowModal(false);
+      setEditingVehicle(null);
+
+      setFormData({
+        name: "",
+        type: "MPV",
+        price: 0,
+        status: "Available",
+        image: "",
+      });
+    } catch (error) {
+      console.error(error);
     }
-
-    setShowModal(false);
-
-    setEditingVehicle(null);
-
-    setFormData({
-      name: "",
-      type: "MPV",
-      price: 0,
-      status: "Available",
-      image: "",
-    });
   };
 
   const handleEdit = (vehicle: Vehicle) => {
@@ -100,9 +112,17 @@ export const VehicleList = () => {
     setShowModal(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm("Yakin ingin menghapus mobil ini?")) {
-      setVehicles(vehicles.filter((vehicle) => vehicle.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Yakin ingin menghapus mobil ini?")) return;
+
+    try {
+      await fetch(`http://127.0.0.1:8000/api/vehicles/${id}`, {
+        method: "DELETE",
+      });
+
+      await fetchVehicles();
+    } catch (error) {
+      console.error(error);
     }
   };
   const filteredVehicles = vehicles.filter((v) => {

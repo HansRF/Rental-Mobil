@@ -1,20 +1,60 @@
-import axios from "axios";
+import { supabase } from "../lib/supabase";
+import { Vehicle, VehicleInput } from "../types";
 
-const API =
-  "http://127.0.0.1:8000/api/vehicles";
+/**
+ * GET ALL VEHICLES
+ */
+export async function getVehicles(): Promise<Vehicle[]> {
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("*");
 
-export const getVehicles = () =>
-  axios.get(API);
+  if (error) {
+    console.error("GET VEHICLES ERROR:", error);
+    throw error;
+  }
 
-export const createVehicle = (
-  data: any
-) => axios.post(API, data);
+  return data ?? [];
+}
 
-export const updateVehicle = (
+/**
+ * CREATE VEHICLE
+ */
+export async function createVehicle(payload: VehicleInput) {
+  const { data, error } = await supabase
+    .from("vehicles")
+    .insert([payload])
+    .select();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * UPDATE VEHICLE
+ */
+export async function updateVehicle(
   id: string,
-  data: any
-) => axios.put(`${API}/${id}`, data);
+  payload: Partial<VehicleInput>
+) {
+  const { data, error } = await supabase
+    .from("vehicles")
+    .update(payload)
+    .eq("id", id)
+    .select();
 
-export const deleteVehicle = (
-  id: string
-) => axios.delete(`${API}/${id}`);
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * DELETE VEHICLE
+ */
+export async function deleteVehicle(id: string) {
+  const { error } = await supabase
+    .from("vehicles")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw error;
+}

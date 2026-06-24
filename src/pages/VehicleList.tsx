@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 import { Vehicle } from "../types";
+import {
+  getVehicles,
+  createVehicle,
+  updateVehicle,
+  deleteVehicle,
+} from "../services/vehicleService";
 import { DashboardLayout } from "../components/DashboardLayout";
 import { Search, Plus, Pencil, Trash2 } from "lucide-react";
 
@@ -15,8 +22,7 @@ export const VehicleList = () => {
 
   const fetchVehicles = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/vehicles");
-      const data = await res.json();
+      const data = await getVehicles();
       setVehicles(data);
     } catch (error) {
       console.error(error);
@@ -29,74 +35,87 @@ export const VehicleList = () => {
   const [formData, setFormData] = useState({
     name: "",
     type: "MPV" as Vehicle["type"],
-    price: 0,
+    price: "",
     status: "Available" as Vehicle["status"],
     image: "",
   });
 
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   // function CRUD taruh di sini
 
   const types = ["All", ...new Set(vehicles.map((v) => v.type))];
   const handleInputChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >,
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
+    const { name, value } = e.target;
+
     setFormData({
       ...formData,
-      [e.target.name]:
-        e.target.name === "price" ||
-        e.target.name === "seats" ||
-        e.target.name === "rating"
-          ? Number(e.target.value)
-          : e.target.value,
+      [name]: value,
     });
   };
 
-  const handleSubmit = async () => {
-    try {
-      const payload = {
-        name: formData.name,
-        type: formData.type,
-        price: formData.price,
-        status: formData.status,
-        image: formData.image,
-      };
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
 
-      if (editingVehicle) {
-        await fetch(`http://127.0.0.1:8000/api/vehicles/${editingVehicle.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetch("http://127.0.0.1:8000/api/vehicles", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
+    if (!file) return;
+
+    setSelectedFile(file);
+  };
+
+const handleSubmit = async () => {
+  try {
+    let imageUrl = formData.image;
+
+    if (selectedFile) {
+      const fileName = `${Date.now()}-${selectedFile.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("vehicles")
+        .upload(fileName, selectedFile);
+
+      if (uploadError) {
+        console.error(uploadError);
+        alert(uploadError.message);
+        return;
       }
 
-      await fetchVehicles();
+      const { data } = supabase.storage
+        .from("vehicles")
+        .getPublicUrl(fileName);
 
-      setShowModal(false);
-      setEditingVehicle(null);
-
-      setFormData({
-        name: "",
-        type: "MPV",
-        price: 0,
-        status: "Available",
-        image: "",
-      });
-    } catch (error) {
-      console.error(error);
+      imageUrl = data.publicUrl;
     }
-  };
+
+    const payload = {
+      name: formData.name,
+      type: formData.type,
+      price: Number(formData.price),
+      status: formData.status,
+      image: imageUrl,
+    };
+
+    console.log("PAYLOAD:", payload);
+
+    if (!payload.name || !payload.type || !payload.price) {
+      alert("Data belum lengkap!");
+      return;
+    }
+
+    if (editingVehicle) {
+      await updateVehicle(editingVehicle.id, payload);
+    } else {
+      await createVehicle(payload);
+    }
+
+    await fetchVehicles();
+
+    setShowModal(false);
+  } catch (error) {
+    console.error("SUBMIT ERROR:", error);
+    alert("Gagal menyimpan data!");
+  }
+};
 
   const handleEdit = (vehicle: Vehicle) => {
     setEditingVehicle(vehicle);
@@ -104,7 +123,7 @@ export const VehicleList = () => {
     setFormData({
       name: vehicle.name,
       type: vehicle.type,
-      price: vehicle.price,
+      price: vehicle.price.toString(),
       status: vehicle.status,
       image: vehicle.image,
     });
@@ -116,13 +135,11 @@ export const VehicleList = () => {
     if (!window.confirm("Yakin ingin menghapus mobil ini?")) return;
 
     try {
-      await fetch(`http://127.0.0.1:8000/api/vehicles/${id}`, {
-        method: "DELETE",
-      });
-
+      await deleteVehicle(id);
       await fetchVehicles();
     } catch (error) {
       console.error(error);
+      alert("Gagal menghapus data!");
     }
   };
   const filteredVehicles = vehicles.filter((v) => {
@@ -197,33 +214,38 @@ export const VehicleList = () => {
         </div>
 
         {showModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-            <div className="bg-brand-card border border-brand-border rounded-xl w-full max-w-md p-6">
-              <h2 className="text-xl font-bold mb-5">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-brand-card border border-brand-border rounded-2xl w-full max-w-md p-6 shadow-2xl">
+              {/* HEADER */}
+              <h2 className="text-xl font-bold text-white mb-6">
                 {editingVehicle ? "Edit Kendaraan" : "Tambah Kendaraan"}
               </h2>
 
               <div className="space-y-4">
+                {/* NAME */}
                 <input
                   type="text"
                   name="name"
                   placeholder="Nama Mobil"
                   value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full p-3 rounded-lg border"
+                  className="w-full p-3 rounded-lg bg-brand-primary text-white border border-brand-border focus:outline-none focus:ring-2 focus:ring-accent"
                 />
 
+                {/* IMAGE */}
                 <input
                   type="file"
                   accept="image/*"
-                  className="w-full p-3 rounded-lg border"
+                  onChange={handleFileChange}
+                  className="w-full p-3 rounded-lg bg-brand-primary text-white border border-brand-border file:bg-accent file:text-white file:border-0 file:px-3 file:py-1 file:rounded"
                 />
 
+                {/* TYPE */}
                 <select
                   name="type"
                   value={formData.type}
                   onChange={handleInputChange}
-                  className="w-full p-3 rounded-lg border"
+                  className="w-full p-3 rounded-lg bg-brand-primary text-white border border-brand-border focus:ring-2 focus:ring-accent"
                 >
                   <option value="MPV">MPV</option>
                   <option value="SUV">SUV</option>
@@ -231,37 +253,41 @@ export const VehicleList = () => {
                   <option value="Motorcycle">Motorcycle</option>
                 </select>
 
+                {/* PRICE */}
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   name="price"
                   placeholder="Harga Per Hari"
                   value={formData.price}
                   onChange={handleInputChange}
-                  className="w-full p-3 rounded-lg border"
+                  className="w-full p-3 rounded-lg bg-brand-primary text-white border border-brand-border focus:ring-2 focus:ring-accent"
                 />
 
+                {/* STATUS */}
                 <select
                   name="status"
                   value={formData.status}
                   onChange={handleInputChange}
-                  className="w-full p-3 rounded-lg border"
+                  className="w-full p-3 rounded-lg bg-brand-primary text-white border border-brand-border focus:ring-2 focus:ring-accent"
                 >
                   <option value="Available">Available</option>
                   <option value="Rented">Rented</option>
                   <option value="Maintenance">Maintenance</option>
                 </select>
 
-                <div className="flex justify-end gap-2 pt-2">
+                {/* BUTTONS */}
+                <div className="flex justify-end gap-3 pt-4">
                   <button
                     onClick={() => setShowModal(false)}
-                    className="px-4 py-2 bg-gray-500 text-white rounded-lg"
+                    className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition"
                   >
                     Batal
                   </button>
 
                   <button
                     onClick={handleSubmit}
-                    className="px-4 py-2 bg-accent text-white rounded-lg"
+                    className="px-4 py-2 rounded-lg bg-accent hover:opacity-90 text-white transition shadow-lg shadow-accent/20"
                   >
                     Simpan
                   </button>
@@ -293,12 +319,14 @@ export const VehicleList = () => {
             </thead>
 
             <tbody>
-              {filteredVehicles.map((vehicle) => (
+              {filteredVehicles.map((vehicle, index) => (
                 <tr
                   key={vehicle.id}
                   className="border-b border-brand-border hover:bg-white/5"
                 >
-                  <td className="p-4">{vehicle.id}</td>
+                  <td className="p-4 font-medium text-text-secondary">
+                    {index + 1}
+                  </td>
 
                   <td className="p-4">
                     <img

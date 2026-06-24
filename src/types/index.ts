@@ -11,6 +11,15 @@ export interface Vehicle {
   rating: number;
   description: string;
 }
+
+export type VehicleInput = {
+  name: string;
+  type: 'MPV' | 'Motorcycle' | 'SUV' | 'Luxury';
+  price: number;
+  status: 'Available' | 'Rented' | 'Maintenance';
+  image: string;
+};
+
 export type UserRole =
   | 'Admin'
   | 'Petugas'

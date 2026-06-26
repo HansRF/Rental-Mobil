@@ -178,8 +178,8 @@ export const Transactions = () => {
         </div>
 
         {/* TABLE */}
-        <div className="bg-brand-card border border-brand-border rounded-xl overflow-hidden">
-          <table className="w-full">
+<div className="bg-brand-card border border-brand-border rounded-xl overflow-x-auto">
+  <table className="w-full min-w-[800px]">
             <thead className="bg-brand-primary">
               <tr className="text-left text-xs text-text-secondary">
                 <th className="p-4">ID</th>

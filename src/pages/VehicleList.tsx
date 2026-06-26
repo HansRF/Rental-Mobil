@@ -63,76 +63,73 @@ export const VehicleList = () => {
     setSelectedFile(file);
   };
 
-const handleSubmit = async () => {
-  try {
-    let imageUrl = formData.image;
+  const handleSubmit = async () => {
+    try {
+      let imageUrl = formData.image;
 
-    if (selectedFile) {
-      const fileName = `${Date.now()}-${selectedFile.name}`;
+      if (selectedFile) {
+        const fileName = `${Date.now()}-${selectedFile.name}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from("vehicles")
-        .upload(fileName, selectedFile);
+        const { error: uploadError } = await supabase.storage
+          .from("vehicles")
+          .upload(fileName, selectedFile);
 
-      if (uploadError) {
-        console.error(uploadError);
-        alert(uploadError.message);
+        if (uploadError) {
+          console.error(uploadError);
+          alert(uploadError.message);
+          return;
+        }
+
+        const { data } = supabase.storage
+          .from("vehicles")
+          .getPublicUrl(fileName);
+
+        imageUrl = data.publicUrl;
+      }
+
+      const payload = {
+        name: formData.name,
+        type: formData.type,
+        price: Number(formData.price),
+        status: formData.status,
+        image: imageUrl,
+      };
+
+      console.log("PAYLOAD:", payload);
+
+      if (!payload.name || !payload.type || !payload.price) {
+        alert("Data belum lengkap!");
         return;
       }
 
-      const { data } = supabase.storage
-        .from("vehicles")
-        .getPublicUrl(fileName);
+      if (editingVehicle) {
+        const oldStatus = editingVehicle.status;
 
-      imageUrl = data.publicUrl;
+        await updateVehicle(editingVehicle.id, payload);
+
+        // Available -> Rented
+        if (oldStatus === "Available" && payload.status === "Rented") {
+          await supabase.from("transactions").insert({
+            vehicle_id: editingVehicle.id,
+            vehicle_name: editingVehicle.name,
+            user_name: "Manual Rental",
+            amount: editingVehicle.price,
+            status: "ongoing",
+            created_at: new Date().toISOString(),
+          });
+        }
+      } else {
+        await createVehicle(payload);
+      }
+
+      await fetchVehicles();
+
+      setShowModal(false);
+    } catch (error) {
+      console.error("SUBMIT ERROR:", error);
+      alert("Gagal menyimpan data!");
     }
-
-    const payload = {
-      name: formData.name,
-      type: formData.type,
-      price: Number(formData.price),
-      status: formData.status,
-      image: imageUrl,
-    };
-
-    console.log("PAYLOAD:", payload);
-
-    if (!payload.name || !payload.type || !payload.price) {
-      alert("Data belum lengkap!");
-      return;
-    }
-
-if (editingVehicle) {
-  const oldStatus = editingVehicle.status;
-
-  await updateVehicle(editingVehicle.id, payload);
-
-  // Available -> Rented
-  if (
-    oldStatus === "Available" &&
-    payload.status === "Rented"
-  ) {
-    await supabase.from("transactions").insert({
-      vehicle_id: editingVehicle.id,
-      vehicle_name: editingVehicle.name,
-      user_name: "Manual Rental",
-      amount: editingVehicle.price,
-      status: "ongoing",
-      created_at: new Date().toISOString(),
-    });
-  }
-} else {
-  await createVehicle(payload);
-}
-
-    await fetchVehicles();
-
-    setShowModal(false);
-  } catch (error) {
-    console.error("SUBMIT ERROR:", error);
-    alert("Gagal menyimpan data!");
-  }
-};
+  };
 
   const handleEdit = (vehicle: Vehicle) => {
     setEditingVehicle(vehicle);
@@ -315,8 +312,8 @@ if (editingVehicle) {
         )}
 
         {/* Table */}
-        <div className="bg-brand-card rounded-xl border border-brand-border overflow-hidden">
-          <table className="w-full">
+        <div className="bg-brand-card border border-brand-border rounded-xl overflow-x-auto">
+          <table className="w-full min-w-[800px]">
             <thead>
               <tr className="border-b border-brand-border bg-brand-primary">
                 <th className="p-4 text-left">ID</th>

@@ -102,11 +102,28 @@ const handleSubmit = async () => {
       return;
     }
 
-    if (editingVehicle) {
-      await updateVehicle(editingVehicle.id, payload);
-    } else {
-      await createVehicle(payload);
-    }
+if (editingVehicle) {
+  const oldStatus = editingVehicle.status;
+
+  await updateVehicle(editingVehicle.id, payload);
+
+  // Available -> Rented
+  if (
+    oldStatus === "Available" &&
+    payload.status === "Rented"
+  ) {
+    await supabase.from("transactions").insert({
+      vehicle_id: editingVehicle.id,
+      vehicle_name: editingVehicle.name,
+      user_name: "Manual Rental",
+      amount: editingVehicle.price,
+      status: "ongoing",
+      created_at: new Date().toISOString(),
+    });
+  }
+} else {
+  await createVehicle(payload);
+}
 
     await fetchVehicles();
 

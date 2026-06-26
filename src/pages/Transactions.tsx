@@ -1,96 +1,251 @@
-import { TRANSACTIONS } from '../constants/dummyData';
-import { DashboardLayout } from '../components/DashboardLayout';
-import { StatusBadge } from '../components/StatusBadge';
-import { MoreHorizontal, FileText, Share2, Filter } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+import { DashboardLayout } from "../components/DashboardLayout";
+import { StatusBadge } from "../components/StatusBadge";
+import { Filter, CheckCircle, Trash2 } from "lucide-react";
+import Swal from "sweetalert2";
+
+type Transaction = {
+  id: string;
+  vehicle_id: string;
+  vehicle_name?: string;
+  user_name: string;
+  amount: number;
+  status: "ongoing" | "done";
+  created_at: string;
+};
 
 export const Transactions = () => {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // ========================
+  // FETCH TRANSACTIONS
+  // ========================
+  const fetchTransactions = async () => {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      setTransactions(data || []);
+    }
+
+    setLoading(false);
+  };
+
+  // ========================
+  // MARK AS DONE (CORE LOGIC)
+  // ========================
+  const markAsDone = async (tx: Transaction) => {
+    const result = await Swal.fire({
+      title: "Konfirmasi Pengembalian",
+      text: `Apakah kendaraan ${tx.vehicle_name} sudah dikembalikan?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Ya, Selesaikan",
+      cancelButtonText: "Batal",
+      confirmButtonColor: "#16a34a",
+      cancelButtonColor: "#6b7280",
+      background: "#161b22",
+      color: "#ffffff",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      // Update transaksi
+      await supabase
+        .from("transactions")
+        .update({
+          status: "done",
+        })
+        .eq("id", tx.id);
+
+      // Update kendaraan
+      await supabase
+        .from("vehicles")
+        .update({
+          status: "Available",
+        })
+        .eq("id", tx.vehicle_id);
+
+      await Swal.fire({
+        title: "Berhasil!",
+        text: "Transaksi berhasil diselesaikan.",
+        icon: "success",
+        timer: 2000,
+        showConfirmButton: false,
+        background: "#161b22",
+        color: "#ffffff",
+      });
+
+      fetchTransactions();
+    } catch (error) {
+      console.error(error);
+
+      Swal.fire({
+        title: "Gagal",
+        text: "Terjadi kesalahan saat memperbarui data.",
+        icon: "error",
+        confirmButtonColor: "#dc2626",
+        background: "#161b22",
+        color: "#ffffff",
+      });
+    }
+  };
+
+  const deleteTransaction = async (tx: Transaction) => {
+    const result = await Swal.fire({
+      title: "Hapus Transaksi?",
+      text: `Transaksi ${tx.vehicle_name} akan dihapus permanen.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Ya, Hapus",
+      cancelButtonText: "Batal",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#6b7280",
+      background: "#161b22",
+      color: "#ffffff",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await supabase.from("transactions").delete().eq("id", tx.id);
+
+      await Swal.fire({
+        title: "Berhasil!",
+        text: "Transaksi berhasil dihapus.",
+        icon: "success",
+        timer: 1500,
+        showConfirmButton: false,
+        background: "#161b22",
+        color: "#ffffff",
+      });
+
+      fetchTransactions();
+    } catch (error) {
+      Swal.fire({
+        title: "Gagal",
+        text: "Tidak dapat menghapus transaksi.",
+        icon: "error",
+        background: "#161b22",
+        color: "#ffffff",
+      });
+    }
+  };
+  useEffect(() => {
+    fetchTransactions();
+
+    // realtime listener
+    const channel = supabase
+      .channel("transactions-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "transactions" },
+        () => {
+          fetchTransactions();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-text-primary mb-1">Transaction History</h1>
-            <p className="text-text-secondary font-medium">View and manage all your past and current rental transactions.</p>
+            <h1 className="text-3xl font-bold text-text-primary">
+              Transactions (Manual Log)
+            </h1>
+            <p className="text-text-secondary">
+              Riwayat penyewaan kendaraan & status pengembalian.
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-brand-card border border-brand-border rounded-lg text-xs font-bold text-text-secondary hover:bg-white/5 transition-all">
-              <Filter size={16} /> Filters
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-accent text-white rounded-lg text-xs font-bold shadow-lg shadow-accent/10 hover:opacity-90 transition-all">
-              Export CSV
-            </button>
-          </div>
+
+          <button className="flex items-center gap-2 px-4 py-2 bg-brand-card border border-brand-border rounded-lg text-sm text-text-secondary">
+            <Filter size={16} /> Filter
+          </button>
         </div>
 
-        <div className="bg-brand-card rounded-xl border border-brand-border overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-brand-secondary/50">
-                  <th className="px-8 py-5 text-[10px] font-bold text-text-secondary uppercase tracking-widest leading-non">Transaction ID</th>
-                  <th className="px-8 py-5 text-[10px] font-bold text-text-secondary uppercase tracking-widest leading-non">Vehicle</th>
-                  <th className="px-8 py-5 text-[10px] font-bold text-text-secondary uppercase tracking-widest leading-non">Customer</th>
-                  <th className="px-8 py-5 text-[10px] font-bold text-text-secondary uppercase tracking-widest leading-non text-center">Date</th>
-                  <th className="px-8 py-5 text-[10px] font-bold text-text-secondary uppercase tracking-widest leading-non text-right">Amount</th>
-                  <th className="px-8 py-5 text-[10px] font-bold text-text-secondary uppercase tracking-widest leading-non text-center">Status</th>
-                  <th className="px-8 py-5 text-[10px] font-bold text-text-secondary uppercase tracking-widest leading-non text-right">Actions</th>
+        {/* TABLE */}
+        <div className="bg-brand-card border border-brand-border rounded-xl overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-brand-primary">
+              <tr className="text-left text-xs text-text-secondary">
+                <th className="p-4">ID</th>
+                <th>Vehicle</th>
+                <th>Customer</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {transactions.map((tx, index) => (
+                <tr
+                  key={tx.id}
+                  className="border-t border-brand-border hover:bg-white/5"
+                >
+                  <td className="p-4 text-sm text-text-secondary">
+                    {index + 1}
+                  </td>
+                  <td className="p-4 font-semibold text-text-primary">
+                    {tx.vehicle_name || "-"}
+                  </td>
+
+                  <td className="p-4 text-text-secondary">{tx.user_name}</td>
+
+                  <td className="p-4 font-bold text-text-primary">
+                    Rp {tx.amount.toLocaleString("id-ID")}
+                  </td>
+
+                  <td className="p-4">
+                    <StatusBadge status={tx.status} />
+                  </td>
+
+                  {/* ACTION */}
+                  <td className="p-4">
+                    <div className="flex gap-2">
+                      {tx.status === "ongoing" && (
+                        <button
+                          onClick={() => markAsDone(tx)}
+                          className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm"
+                        >
+                          <CheckCircle size={16} />
+                          Selesai
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => deleteTransaction(tx)}
+                        className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm"
+                      >
+                        <Trash2 size={16} />
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-brand-border">
-                {TRANSACTIONS.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
-                    <td className="px-8 py-5">
-                      <span className="text-xs font-bold text-text-secondary">#{tx.id}</span>
-                    </td>
-                    <td className="px-8 py-5">
-                      <p className="text-sm font-bold text-text-primary">{tx.vehicleName}</p>
-                    </td>
-                    <td className="px-8 py-5">
-                      <p className="text-sm font-medium text-text-secondary">{tx.userName}</p>
-                    </td>
-                    <td className="px-8 py-5">
-                      <p className="text-xs font-bold text-text-secondary text-center">{new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                      <p className="text-sm font-black text-text-primary">${tx.amount}</p>
-                    </td>
-                    <td className="px-8 py-5 text-center">
-                      <StatusBadge status={tx.status} className="text-[9px]" />
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-2 text-text-secondary hover:text-accent transition-colors">
-                          <FileText size={16} />
-                        </button>
-                        <button className="p-2 text-text-secondary hover:text-accent transition-colors">
-                          <Share2 size={16} />
-                        </button>
-                        <button className="p-2 text-text-secondary hover:text-accent transition-colors">
-                          <MoreHorizontal size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          
-          <div className="px-8 py-4 bg-brand-secondary border-t border-brand-border flex items-center justify-between">
-            <p className="text-xs text-text-secondary font-bold">Showing 5 of 124 transactions</p>
-            <div className="flex items-center gap-2">
-              <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-brand-border bg-brand-card text-text-secondary disabled:opacity-50" disabled>
-                &larr;
-              </button>
-              <div className="flex gap-1">
-                <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-accent text-white text-xs font-bold">1</button>
-                <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-brand-card border border-brand-border text-text-secondary text-xs font-bold">2</button>
-              </div>
-              <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-brand-border bg-brand-card text-text-secondary hover:text-accent transition-colors">
-                &rarr;
-              </button>
+              ))}
+            </tbody>
+          </table>
+
+          {transactions.length === 0 && (
+            <div className="p-10 text-center text-text-secondary">
+              Belum ada transaksi.
             </div>
-          </div>
+          )}
         </div>
       </div>
     </DashboardLayout>
